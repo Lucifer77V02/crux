@@ -54,20 +54,27 @@ except KeyError:
 
 # --- 5. CORE LOGIC (Whisper) ---
 def get_video_transcript_whisper(youtube_url):
-    # Temporary filename
     audio_filename = "temp_lecture_audio.m4a"
     
-    # yt-dlp options to download only audio
     ydl_opts = {
         'format': 'm4a/bestaudio/best',
-        'outtmpl': 'temp_lecture_audio', # extension added by processor
+        'outtmpl': 'temp_lecture_audio',
         'noplaylist': True,
+        # --- ADD THESE TO BYPASS 403 ---
+        'quiet': True,
+        'no_warnings': True,
+        'nocheckcertificate': True,
+        'ignoreerrors': False,
+        'logtostderr': False,
+        'add_header': [
+            'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+        ],
+        # -------------------------------
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'm4a',
         }],
     }
-
     try:
         # 1. Download Audio
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
