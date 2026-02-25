@@ -52,7 +52,7 @@ except KeyError:
 # --- 5. CORE LOGIC ---
 def get_video_transcript(youtube_url):
     # This pattern covers: watch?v=ID, youtu.be/ID, shorts/ID, and embed/ID
-    pattern = r"(?:v=|\/|be\/|embed\/|shorts\/)([0-9A-Za-z_-]{11})"
+    pattern = r"(?:v=|\/|be\/|embed\/|shorts\/)([0-9A-Za-z_-])"
     video_id_match = re.search(pattern, youtube_url)
     
     if not video_id_match:
@@ -65,7 +65,7 @@ def get_video_transcript(youtube_url):
 
     try:
         response = requests.get(
-            url='https://app.scrapingbee.com',
+            url='https://app.scrapingbee.com/api/v1/youtube/transcript',
             params={
                 'api_key': st.secrets["SCRAPINGBEE_API_KEY"],
                 'video_id': video_id,
