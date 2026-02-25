@@ -51,34 +51,37 @@ except KeyError:
 
 # --- 5. CORE LOGIC ---
 def get_video_transcript(youtube_url):
-    video_id_match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", youtube_url)
-    if not video_id_match: return None, "Invalid YouTube URL."
+    # This pattern covers: watch?v=ID, youtu.be/ID, shorts/ID, and embed/ID
+    pattern = r"(?:v=|\/|be\/|embed\/|shorts\/)([0-9A-Za-z_-]{11})"
+    video_id_match = re.search(pattern, youtube_url)
+    
+    if not video_id_match:
+        return None, "❌ Could not find a valid Video ID in that URL."
+        
     video_id = video_id_match.group(1)
     
+    # DEBUG: See exactly what is being sent
+    # st.write(f"🔍 System identified Video ID: `{video_id}`") 
+
     try:
-        SB_API_KEY = st.secrets["SCRAPINGBEE_API_KEY"]
-    except KeyError:
-        return None, "Missing SCRAPINGBEE_API_KEY in secrets."
-    
-    try:
-        # CORRECT ENDPOINT URL BELOW
         response = requests.get(
-            url='https://app.scrapingbee.com/api/v1/youtube/transcript', 
-            params={'api_key': SB_API_KEY, 'video_id': video_id}
+            url='https://app.scrapingbee.com',
+            params={
+                'api_key': st.secrets["SCRAPINGBEE_API_KEY"],
+                'video_id': video_id
+            },
+            timeout=30
         )
         
         if response.status_code == 200:
-            data = response.json() # This will work now because it's real JSON
-            if not data:
-                return None, "No transcript data returned."
-            full_transcript = " ".join([chunk['text'] for chunk in data])
-            return full_transcript, None
-            
+            data = response.json()
+            return " ".join([chunk['text'] for chunk in data]), None
         else:
-            return None, f"ScrapingBee Error {response.status_code}: {response.text[:100]}"
+            # If ScrapingBee still throws 500, it's likely a YouTube-side block
+            return None, f"ScrapingBee Error {response.status_code}: {response.text[:50]}"
             
     except Exception as e:
-        return None, f"Connection Error: {str(e)}"
+        return None, f"Connection error: {str(e)}"
 
 
 def generate_cheat_sheet(transcript, api_key):
