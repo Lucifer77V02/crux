@@ -69,7 +69,7 @@ def get_video_transcript(youtube_url):
             params={
                 'api_key': st.secrets["SCRAPINGBEE_API_KEY"],
                 'video_id': video_id,
-                 'transcript_origin': 'auto-generated' 
+                 'transcript_origin': 'auto_generated' 
             },
             timeout=30
         )
