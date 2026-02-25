@@ -1,10 +1,12 @@
 import streamlit as st
 import requests
 from streamlit_lottie import st_lottie
-from youtube_transcript_api import YouTubeTranscriptApi
 import google.generativeai as genai
 import re
 import io
+import os
+import yt_dlp
+from openai import OpenAI
 from markdown_pdf import MarkdownPdf, Section
 
 # --- 1. PAGE SETUP & BRANDING ---
@@ -44,50 +46,54 @@ st.markdown("---")
 # --- 4. SECRETS ---
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
-    PROXY_KEY = st.secrets["WEBSCRAPING_AI_KEY"]
+    OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+    client = OpenAI(api_key=OPENAI_API_KEY)
 except KeyError:
-    st.error("⚠️ API Keys missing in Streamlit Secrets!")
+    st.error("⚠️ API Keys (GEMINI or OPENAI) missing in Streamlit Secrets!")
     st.stop()
 
-# --- 5. CORE LOGIC ---
-def get_video_transcript(youtube_url):
-    # This pattern covers: watch?v=ID, youtu.be/ID, shorts/ID, and embed/ID
-    pattern = r"(?:v=|\/|be\/|embed\/|shorts\/)([0-9A-Za-z_-]){11}"
-    video_id_match = re.search(pattern, youtube_url)
+# --- 5. CORE LOGIC (Whisper) ---
+def get_video_transcript_whisper(youtube_url):
+    # Temporary filename
+    audio_filename = "temp_lecture_audio.m4a"
     
-    if not video_id_match:
-        return None, "❌ Could not find a valid Video ID in that URL."
-        
-    video_id = video_id_match.group(1)
-    
-    # DEBUG: See exactly what is being sent
-    # st.write(f"🔍 System identified Video ID: `{video_id}`") 
+    # yt-dlp options to download only audio
+    ydl_opts = {
+        'format': 'm4a/bestaudio/best',
+        'outtmpl': 'temp_lecture_audio', # extension added by processor
+        'noplaylist': True,
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'm4a',
+        }],
+    }
 
     try:
-        response = requests.get(
-            url='https://app.scrapingbee.com/api/v1/youtube/transcript',
-            params={
-                'api_key': st.secrets["SCRAPINGBEE_API_KEY"],
-                'video_id': video_id,
-                'language': 'en',
-                'transcript_origin': 'auto_generated'    # Required to see the transcript button
-            }
-        )
+        # 1. Download Audio
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([youtube_url])
         
-        if response.status_code == 200:
-            data = response.json()
-            return " ".join([chunk['text'] for chunk in data]), None
-        else:
-            # If ScrapingBee still throws 500, it's likely a YouTube-side block
-            return None, f"ScrapingBee Error {response.status_code}: {response.text[:50]}"
+        # 2. Transcribe with OpenAI Whisper
+        with open(audio_filename, "rb") as audio_file:
+            transcript_response = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_file
+            )
+        
+        # 3. Cleanup file
+        if os.path.exists(audio_filename):
+            os.remove(audio_filename)
             
-    except Exception as e:
-        return None, f"Connection error: {str(e)}"
+        return transcript_response.text, None
 
+    except Exception as e:
+        # Cleanup on failure
+        if os.path.exists(audio_filename): os.remove(audio_filename)
+        return None, f"Whisper Error: {str(e)}"
 
 def generate_cheat_sheet(transcript, api_key):
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash') # Corrected model name
+    model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"Expert Professor: Create a Cheat Sheet from this transcript. Include Summary, Core Concepts, Key Terms, and a 5-question Practice Exam with Answer Key. \n\nTranscript: {transcript}"
     response = model.generate_content(prompt)
     return response.text
@@ -100,12 +106,12 @@ if generate_button:
     if not youtube_url:
         st.warning("⚠️ Paste a link first!")
     else:
-        with st.status("Initializing CruX...", expanded=True) as status:
-            st.write("📥 Extraction in progress (Residential Proxy)...")
-            transcript, error = get_video_transcript(youtube_url)
+        with st.status("CruX is listening to your lecture...", expanded=True) as status:
+            st.write("📥 Downloading audio & transcribing (OpenAI Whisper)...")
+            transcript, error = get_video_transcript_whisper(youtube_url)
             
             if error:
-                status.update(label="Extraction Failed", state="error")
+                status.update(label="Transcription Failed", state="error")
                 st.error(error)
             else:
                 st.write("🧠 AI Analyzing Lecture...")
