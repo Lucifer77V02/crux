@@ -65,7 +65,7 @@ def get_video_transcript(youtube_url):
 
     try:
         response = requests.get(
-            url='https://app.scrapingbee.com/api/v1/youtube/transcript',
+            url='https://app.scrapingbee.com',
             params={
                 'api_key': st.secrets["SCRAPINGBEE_API_KEY"],
                 'video_id': video_id,
